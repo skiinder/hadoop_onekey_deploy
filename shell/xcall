@@ -1,0 +1,20 @@
+#!/bin/bash
+while getopts "w:" arg; do
+    case $arg in
+    w)
+        CLUSTER_TMP=$OPTARG
+        ;;
+    ?)
+        echo "unkonw argument $arg"
+        exit 1
+        ;;
+    esac
+done
+if [ "$CLUSTER_TMP" ]; then
+  CLUSTER=$CLUSTER_TMP
+  shift
+  shift
+fi
+[ -z "$CLUSTER" ] && CLUSTER="hadoop102,hadoop103,hadoop104"
+#pdsh -w "$CLUSTER" "$*" | sort -k1 -t" " | awk -F ": " '{if (host!=$1) {host=$1;print ">>>>>>>>>>>>  "host"  <<<<<<<<<<<<"};$1=null;print $0  }'
+pdsh -w "$CLUSTER" "$*" | awk -F ": " '{key=$1;$1=null;out[key]=out[key]"\n"$0} END{ for (i in out) {print ">>>>>>>>>>>>  "i"  <<<<<<<<<<<<"out[i]} }'
