@@ -1,0 +1,3 @@
+#!/bin/bash
+CLUSTER="hadoop102,hadoop103,hadoop104"
+xcall -w $CLUSTER "jps" | grep -v Jps

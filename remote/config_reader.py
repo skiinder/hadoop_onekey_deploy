@@ -7,4 +7,7 @@ from os.path import dirname
 if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read(dirname(sys.argv[0]) + "/config.ini")
-    print(config[sys.argv[1]][sys.argv[2]])
+    try:
+        print(config[sys.argv[1]][sys.argv[2]])
+    except KeyError:
+        exit(1)

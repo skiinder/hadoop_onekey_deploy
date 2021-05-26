@@ -6,6 +6,8 @@ SOURCE=$($TMP_DIR/remote/config_reader.py GLOBAL DefaultSource)
 
 package=$1
 case $package in
+java)
+  ;;
 hadoop)
   IFS="," read -r -a NNs <<<"$($TMP_DIR/remote/config_reader.py HADOOP NameNode)"
   if [ "${#NNs[@]}" -eq 1 ]; then

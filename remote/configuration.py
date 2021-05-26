@@ -224,10 +224,14 @@ def config_hive():
     hive_site["javax.jdo.option.ConnectionPassword"] = config["MySQLPassword"]
     hive_site["hive.metastore.warehouse.dir"] = "/user/hive/warehouse"
     hive_site["hive.metastore.schema.verification"] = "false"
-    hive_site["hive.server2.thrift.port"] = "10000"
-    hive_site["hive.server2.thrift.bind.host"] = config["Host"]
+    hive_site["hive.server2.thrift.bind.host"] = socket.gethostname()
     hive_site["hive.metastore.event.db.notification.api.auth"] = "false"
     hive_site["hive.server2.active.passive.ha.enable"] = "true"
+    hive_site["hive.server2.support.dynamic.service.discovery"] = "true"
+    hive_site["hive.server2.zookeeper.namespace"] = "hiveserver2"
+    hive_site["hive.zookeeper.client.port"] = "2181"
+    hive_site["hive.zookeeper.quorum"] = ":2181,".join(global_config["ZOOKEEPER"]["Host"].split(",")) + ":2181"
+
     hive_site["hive.exec.dynamic.partition.mode"] = "nonstrict"
     hive_site.save()
 

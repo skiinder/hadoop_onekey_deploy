@@ -8,10 +8,11 @@
 - 配置所有节点的ip和hostname映射
 - 配置所有节点相互免密登录, root用户和一般用户都需要
 - 其他依赖如下
-    ```bash
-    sudo yum install -y epel-release
-    sudo yum install -y psmisc nc net-tools rsync vim lrzsz ntp libzstd openssl-static libaio pv pdsh python3-devel
-    sudo pip3 install requests
-    ```
+
+```bash
+sudo yum install -y epel-release
+sudo yum install -y psmisc nc net-tools rsync vim lrzsz ntp libzstd openssl-static libaio pv pdsh python3-devel
+sudo pip3 install requests
+```
 
 
