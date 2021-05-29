@@ -36,9 +36,9 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read(dirname(sys.argv[0]) + "/config.ini")
     try:
-        if sys.argv[1] in ["java", "hadoop", "flume", "zookeeper", "hive", "kafka", "spark", "hbase"]:
+        if sys.argv[1] in ["java", "hadoop", "zookeeper", "hive", "kafka", "spark", "hbase"]:
             set_home(sys.argv[1].upper())
         else:
-            print("No package: " + sys.argv[1])
+            pass
     except Exception as e:
         print(e)

@@ -9,6 +9,7 @@ import sys
 import xml.dom.minidom
 import xml.etree.cElementTree as etree
 import xml.sax
+from enum import Enum
 
 from os.path import dirname
 
@@ -85,6 +86,11 @@ class Configuration:
         output = open(self.__source, "w")
         doc.writexml(output, indent="", addindent="    ", newl="\n", encoding="utf-8")
         output.close()
+
+
+class Azkaban(Enum):
+    WEB = 0
+    EXEC = 1
 
 
 def config_null():
@@ -303,8 +309,64 @@ def config_spark():
     spark_env.close()
 
 
+def config_azkaban(component: str):
+    config = global_config["AZKABAN"]
+    home_dir = config["Home"]
+    if component == "web":
+        def config_web():
+            az_config = Properties(home_dir + "/web/conf/azkaban.properties")
+            az_config["default.timezone.id"] = "Asia/Shanghai"
+            az_config["mysql.host"] = global_config["MYSQL"]["Host"]
+            az_config["mysql.database"] = config["DB"]
+            az_config["mysql.user"] = config["MySQLUser"]
+            az_config["mysql.password"] = config["MySQLPassword"]
+            az_config["azkaban.executorselector.filters"] = "StaticRemainingFlowSize,CpuStatus"
+            az_config.save()
+        return config_web
+    elif component == "exec":
+        def config_exec():
+            az_config = Properties(home_dir + "/exec/conf/azkaban.properties")
+            az_config["default.timezone.id"] = "Asia/Shanghai"
+            az_config["azkaban.webserver.url"] = "http://" + config["Web"] + ":8081"
+            az_config["executor.port"] = "12321"
+            az_config["mysql.host"] = global_config["MYSQL"]["Host"]
+            az_config["mysql.database"] = config["DB"]
+            az_config["mysql.user"] = config["MySQLUser"]
+            az_config["mysql.password"] = config["MySQLPassword"]
+            az_config.save()
+        return config_exec
+
+
 def config_hbase():
-    pass
+    config = global_config["HBASE"]
+    home_dir = config["Home"]
+    hbase_config = Configuration(home_dir + "/conf/hbase-site.xml")
+    hadoop_core = Configuration(global_config["HADOOP"]["Home"] + "/etc/hadoop/core-site.xml")
+    hbase_config["hbase.rootdir"] = hadoop_core["fs.defaultFS"] + "/hbase"
+    hbase_config["hbase.cluster.distributed"] = "true"
+    hbase_config["hbase.zookeeper.quorum"] = global_config["ZOOKEEPER"]["Host"]
+    hbase_config["hbase.unsafe.stream.capability.enforce"] = "false"
+    hbase_config["hbase.wal.provider"] = "filesystem"
+    hbase_config.save()
+
+    hbase_env = open(home_dir + "/conf/hbase-env.sh", "r")
+    lines = hbase_env.readlines()
+    hbase_env.close()
+
+    hbase_env = open(home_dir + "/conf/hbase-env.sh", "w")
+    for line in lines:
+        if "HBASE_MANAGES_ZK" in line:
+            hbase_env.write("export HBASE_MANAGES_ZK=false\n")
+        else:
+            hbase_env.write(line)
+    hbase_env.close()
+
+    region_servers = open(home_dir + "/conf/regionservers", "w")
+    for host in config["RegionServer"].split(","):
+        region_servers.write(host + "\n")
+    region_servers.close()
+
+    os.remove(home_dir + "/lib/slf4j-log4j12-1.7.25.jar")
 
 
 if __name__ == "__main__":
@@ -321,6 +383,8 @@ if __name__ == "__main__":
         "kafka": config_kafka,
         "spark": config_spark,
         "hbase": config_hbase,
+        "az-web": config_azkaban("web"),
+        "az-exec": config_azkaban("exec"),
     }
 
     try:

@@ -14,12 +14,14 @@ def extract_tar(source: str, target: str):
     target_dir = dirname(target)
     stream = requests.get(source, stream=True).raw if source.startswith("http") else open(source, mode="rb")
     tarfile_open = tarfile.open(fileobj=io.BytesIO(stream.read()), mode="r|gz")
-    try:
-        tarfile_open.extractall(target_dir)
-        original_name = tarfile_open.getnames()[0].split("/")[0]
+    member = tarfile_open.next()
+    original_name = member.name.split("/")[0] if member else None
+    while member:
+        tarfile_open.extract(member, target_dir)
+        member = tarfile_open.next()
+    if original_name:
         os.renames(target_dir + "/" + original_name, target)
-    finally:
-        tarfile_open.close()
+    tarfile_open.close()
 
 
 if __name__ == "__main__":
