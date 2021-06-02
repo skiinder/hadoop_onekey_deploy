@@ -19,7 +19,7 @@ def extract_tar(source: str, target: str):
     while member:
         tarfile_open.extract(member, target_dir)
         member = tarfile_open.next()
-    if original_name:
+    if original_name and (target_dir + "/" + original_name) != target:
         os.renames(target_dir + "/" + original_name, target)
     tarfile_open.close()
 

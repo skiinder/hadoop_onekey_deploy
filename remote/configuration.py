@@ -9,7 +9,6 @@ import sys
 import xml.dom.minidom
 import xml.etree.cElementTree as etree
 import xml.sax
-from enum import Enum
 
 from os.path import dirname
 
@@ -23,7 +22,7 @@ class Properties:
             for line in pro_file:
                 if line.find("=") > 0 and not re.match("^ *#", line):
                     s = line.replace("\n", "").split("=")
-                    self.__pros[s[0]] = s[1]
+                    self.__pros[s[0].strip()] = s[1].strip()
             pro_file.close()
         except Exception:
             pass
@@ -88,9 +87,18 @@ class Configuration:
         output.close()
 
 
-class Azkaban(Enum):
-    WEB = 0
-    EXEC = 1
+def sed(file: str, sub: dict):
+    tmp = open(file, "r")
+    lines = tmp.readlines()
+    tmp.close()
+    tmp = open(file, "w")
+    for line in lines:
+        tmp_line = line
+        for key, value in sub.items():
+            if key in line:
+                tmp_line = line.replace(key, value)
+        tmp.write(tmp_line)
+    tmp.close()
 
 
 def config_null():
@@ -104,9 +112,9 @@ def config_hadoop():
     core_site.clear()
     core_site["hadoop.tmp.dir"] = config["Data"]
     core_site["hadoop.http.staticuser.user"] = username
-    core_site["hadoop.http." + username + ".hosts"] = "*"
-    core_site["hadoop.http." + username + ".groups"] = "*"
-    core_site["hadoop.http." + username + ".users"] = "*"
+    core_site["hadoop.proxyuser." + username + ".hosts"] = "*"
+    core_site["hadoop.proxyuser." + username + ".groups"] = "*"
+    core_site["hadoop.proxyuser." + username + ".users"] = "*"
     name_nodes = config["NameNode"].split(",")
     zk_hosts = global_config["ZOOKEEPER"]["Host"].split(",")
     if not len(name_nodes) > 1:
@@ -223,8 +231,8 @@ def config_hive():
     shutil.copy(global_config["GLOBAL"]["DefaultSource"] + "/" + global_config["MYSQL"]["Connector"], home_dir + "/lib")
     hive_site = Configuration(home_dir + "/conf/hive-site.xml")
     hive_site.clear()
-    hive_site["javax.jdo.option.ConnectionURL"] = "jdbc:mysql://" + global_config["MYSQL"]["Host"] + ":3306/" \
-                                                  + config["MetaDB"] + "?useSSL=false"
+    hive_site["javax.jdo.option.ConnectionURL"] = "jdbc:mysql://" + global_config["MYSQL"]["Host"] + ":3306/" + config[
+        "MetaDB"] + "?useSSL=false&useUnicode=true&characterEncoding=UTF-8"
     hive_site["javax.jdo.option.ConnectionDriverName"] = "com.mysql.jdbc.Driver"
     hive_site["javax.jdo.option.ConnectionUserName"] = config["MySQLUser"]
     hive_site["javax.jdo.option.ConnectionPassword"] = config["MySQLPassword"]
@@ -237,9 +245,19 @@ def config_hive():
     hive_site["hive.server2.zookeeper.namespace"] = "hiveserver2"
     hive_site["hive.zookeeper.client.port"] = "2181"
     hive_site["hive.zookeeper.quorum"] = ":2181,".join(global_config["ZOOKEEPER"]["Host"].split(",")) + ":2181"
-
     hive_site["hive.exec.dynamic.partition.mode"] = "nonstrict"
     hive_site.save()
+
+    env_tmp = open(home_dir + "/conf/hive-env.sh.template", "r")
+    lines = env_tmp.readlines()
+    env_tmp.close()
+    env = open(home_dir + "/conf/hive-env.sh", "w")
+    for line in lines:
+        if "HADOOP_HEAPSIZE" in line:
+            env.write("export HADOOP_HEAPSIZE=2048" + "\n")
+        else:
+            env.write(line)
+    env.close()
 
 
 def config_kafka():
@@ -271,25 +289,22 @@ def config_spark():
     hive_spark_config["spark.executor.memory"] = "4g"
     hive_spark_config["spark.memory.offHeap.enabled"] = "true"
     hive_spark_config["spark.memory.offHeap.size"] = "2g"
+    hive_spark_config["spark.driver.extraLibraryPath"] = global_config["HADOOP"]["Home"] + "/lib/native"
+    hive_spark_config["spark.executor.extraLibraryPath"] = global_config["HADOOP"]["Home"] + "/lib/native"
     hive_spark_config.save()
 
     config = global_config["SPARK"]
     home_dir = config["Home"]
+    shutil.copy(global_config["HIVE"]["Home"] + "/conf/spark-defaults.conf", home_dir + "/conf/spark-defaults.conf")
     spark_config = Properties(home_dir + "/conf/spark-defaults.conf")
-    spark_config.clear()
-    spark_config["spark.master"] = "yarn"
-    spark_config["spark.eventLog.enabled"] = "true"
-    spark_config["spark.eventLog.dir"] = hadoop_core["fs.defaultFS"] + "/spark/history"
     spark_config["spark.yarn.historyServer.address"] = config["HistoryServer"] + ":18080"
+    spark_config["spark.history.fs.logDirectory"] = hadoop_core["fs.defaultFS"] + "/spark/history"
     spark_config["spark.sql.adaptive.enabled"] = "true"
     spark_config["spark.sql.adaptive.coalescePartitions.enabled"] = "true"
     spark_config["spark.sql.hive.convertMetastoreParquet"] = "false"
     spark_config["spark.sql.parquet.writeLegacyFormat"] = "true"
     spark_config["spark.hadoop.fs.hdfs.impl.disable.cache"] = "true"
     spark_config["spark.sql.storeAssignmentPolicy"] = "LEGACY"
-    spark_config["spark.executor.memory"] = "4g"
-    spark_config["spark.memory.offHeap.enabled"] = "true"
-    spark_config["spark.memory.offHeap.size"] = "2g"
     spark_config.save()
 
     try:
@@ -322,6 +337,7 @@ def config_azkaban(component: str):
             az_config["mysql.password"] = config["MySQLPassword"]
             az_config["azkaban.executorselector.filters"] = "StaticRemainingFlowSize,CpuStatus"
             az_config.save()
+
         return config_web
     elif component == "exec":
         def config_exec():
@@ -334,6 +350,7 @@ def config_azkaban(component: str):
             az_config["mysql.user"] = config["MySQLUser"]
             az_config["mysql.password"] = config["MySQLPassword"]
             az_config.save()
+
         return config_exec
 
 
@@ -369,6 +386,68 @@ def config_hbase():
     os.remove(home_dir + "/lib/slf4j-log4j12-1.7.25.jar")
 
 
+def config_shucang():
+    config = global_config["SHUCANG"]
+    app_home = config["AppHome"]
+    db_home = config["DbHome"]
+    flume_data_dir = global_config["FLUME"]["Data"]
+    mysql_host = global_config["MYSQL"]["Host"]
+    mysql_password = global_config["MYSQL"]["RootPassword"]
+    sqoop_home = global_config["SQOOP"]["Home"]
+
+    flume1 = Properties(app_home + "/file-flume-kafka.conf")
+    flume1["a1.sources.r1.filegroups.f1"] = app_home + "/log/app.*"
+    flume1["a1.sources.r1.positionFile"] = flume_data_dir + "/taildir_position.json"
+    flume1["a1.channels.c1.kafka.bootstrap.servers"] = ":9092,".join(global_config["KAFKA"]["Host"].split(",")) + ":9092"
+    flume1.save()
+
+    flume2 = Properties(app_home + "/kafka-flume-hdfs.conf")
+    flume2["a1.sources.r1.kafka.bootstrap.servers"] = ":9092,".join(global_config["KAFKA"]["Host"].split(",")) + ":9092"
+    flume2["a1.channels.c1.checkpointDir"] = flume_data_dir + "/checkpoint/behavior1"
+    flume2["a1.channels.c1.dataDirs"] = flume_data_dir + "/data/behavior1"
+    flume2.save()
+
+    sed(app_home + "/logback.xml", {
+        "/opt/module/applog": app_home
+    })
+    sed("/home/" + username + "/bin/f1.sh", {
+        "hadoop102,hadoop103": config["FlumeLog"],
+        "/opt/module/applog": app_home,
+    })
+    sed("/home/" + username + "/bin/mock.sh", {
+        "/opt/module/db_log": db_home,
+    })
+    sed("/home/" + username + "/bin/f2.sh", {
+        "hadoop104": config["FlumeHDFS"],
+        "/opt/module/db_log": app_home,
+    })
+    sed("/home/" + username + "/bin/lg.sh", {
+        "hadoop102,hadoop103": config["FlumeLog"],
+        "/opt/module/applog": app_home,
+    })
+    sed("/home/" + username + "/bin/hdfs_to_mysql.sh", {
+        "hadoop102": mysql_host,
+        "000000": mysql_password,
+        "/opt/module/sqoop": sqoop_home,
+    })
+    sed("/home/" + username + "/bin/mysql_to_hdfs.sh", {
+        "hadoop102": mysql_host,
+        "000000": mysql_password,
+        "/opt/module/sqoop": sqoop_home,
+    })
+    sed("/home/" + username + "/bin/mysql_to_hdfs_init.sh", {
+        "hadoop102": mysql_host,
+        "000000": mysql_password,
+        "/opt/module/sqoop": sqoop_home,
+    })
+
+    db_pro = Properties(db_home + "/application.properties")
+    db_pro["spring.datasource.url"] = "jdbc:mysql://" + mysql_host + ":3306/gmall?characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8"
+    db_pro["spring.datasource.username"] = "root"
+    db_pro["spring.datasource.password"] = mysql_password
+    db_pro.save()
+
+
 if __name__ == "__main__":
     global_config = configparser.ConfigParser()
     global_config.read(dirname(sys.argv[0]) + "/config.ini")
@@ -385,6 +464,7 @@ if __name__ == "__main__":
         "hbase": config_hbase,
         "az-web": config_azkaban("web"),
         "az-exec": config_azkaban("exec"),
+        "shucang": config_shucang,
     }
 
     try:

@@ -14,5 +14,15 @@ sudo yum install -y epel-release
 sudo yum install -y psmisc nc net-tools rsync vim lrzsz ntp libzstd openssl-static libaio pv pdsh python3-devel
 sudo pip3 install requests
 ```
+## 配置文件
+
+配置文件为remote/config.ini, 每个框架的配置是一个独立的Section
+
+[GLOBAL]
+EnvFile: 环境变量配置文件, 一般CentOS为/etc/profile.d/custom.sh, Ubuntu为/etc/environment
+Username: 所有框架运行的用户, 不能是root
+DefaultSource: 默认安装源地址, 可以是网络或本地路径, 可以被框架Archive属性覆盖
+Cluster: 集群所有节点
+
 
 

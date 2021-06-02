@@ -39,7 +39,7 @@ function install_packages() {
     echo "配置$1"
     xcall -w "$CLUSTER" "$TMP_DIR/remote/configuration.py $package" >/dev/null 2>&1
     echo "初始化$1"
-    xcall -w "$CLUSTER" "$TMP_DIR/remote/initialize.sh $package" >/dev/null 2>&1
+    xcall -w "$CLUSTER" "$TMP_DIR/remote/initialize.sh $package"
     ;;
   mysql)
     MySQL_Host=$($TMP_DIR/remote/config_reader.py MYSQL Host)
@@ -52,6 +52,9 @@ function install_packages() {
     xcall -w "$AZ_Host" "$TMP_DIR/remote/initialize.sh $package" >/dev/null 2>&1
     ;;
   shucang)
+    SC_HOST=$($TMP_DIR/remote/config_reader.py SHUCANG Host)
+    echo "将$package""安装到$SC_HOST"
+    xcall -w "$SC_HOST" "$TMP_DIR/remote/initialize.sh $package"
     ;;
   *) ;;
   esac
@@ -67,6 +70,11 @@ function install_packages() {
   zookeeper)
     sed -i "/^CLUSTER/s/CLUSTER=.*/CLUSTER='$CLUSTER'/" ./shell/zks.sh
     cp ./shell/zks.sh /home/$USERNAME/bin/
+    /home/$USERNAME/bin/zks.sh start
+    ;;
+  hadoop)
+    su - "$USERNAME" -c "start-dfs.sh"
+    su - "$USERNAME" -c "start-yarn.sh"
     ;;
   hive)
     sed -i "/^CLUSTER/s/CLUSTER=.*/CLUSTER='$CLUSTER'/" ./shell/hive_services.sh
@@ -82,26 +90,30 @@ function install_packages() {
   azkaban)
     WEB="$($TMP_DIR/remote/config_reader.py AZKABAN Web)"
     EXEC="$($TMP_DIR/remote/config_reader.py AZKABAN Exec)"
-    AZ_HOME="$($TMP_DIR/remote/config_reader.py AZKABAN Exec)"
+    AZ_HOME="$($TMP_DIR/remote/config_reader.py AZKABAN Home)"
     sed -i "/^AZ_WEB/s/AZ_WEB=.*/AZ_WEB='$WEB'/" ./shell/az.sh
     sed -i "/^AZ_EXEC/s/AZ_EXEC=.*/AZ_EXEC='$EXEC'/" ./shell/az.sh
-    sed -i "/^AZ_HOME/s/AZ_HOME=.*/AZ_HOME='$AZ_HOME'/" ./shell/az.sh
+    sed -i "/^AZ_HOME/s/AZ_HOME=.*/AZ_HOME='${AZ_HOME//\//\\/}'/" ./shell/az.sh
     cp ./shell/az.sh /home/$USERNAME/bin/
     ;;
   esac
 }
 case $1 in
 all)
-  for i in java zookeeper hadoop mysql hive flume kafka spark azkaban hbase; do
+  for i in java zookeeper hadoop mysql hive sqoop flume kafka spark azkaban hbase shucang; do
     install_packages $i
   done
   ;;
-java | hadoop | zookeeper | flume | kafka | hbase | spark | hive | sqoop | mysql | azkaban )
+java | hadoop | zookeeper | flume | kafka | hbase | spark | hive | sqoop | mysql | azkaban | shucang)
   install_packages $1
   ;;
 *)
   ;;
 esac
+
+"/home/${USERNAME}/bin/zks.sh" stop
+su - "$USERNAME" -c "stop-dfs.sh"
+su - "$USERNAME" -c "stop-yarn.sh"
 CLUSTER=$($TMP_DIR/remote/config_reader.py GLOBAL Cluster)
 xsync "/home/$USERNAME/bin"
 xcall "killall -9 java" 2>/dev/null

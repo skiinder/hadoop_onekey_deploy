@@ -14,8 +14,6 @@ hadoop)
     fi
   else
     if [ "${NNs[0]}" = "$HOSTNAME" ]; then
-      ZK=$($TMP_DIR/remote/config_reader.py ZOOKEEPER Host)
-      xcall -w "$ZK" 'zkServer.sh start'
       JN=$($TMP_DIR/remote/config_reader.py HADOOP JournalNode)
       su "$USERNAME" -c "hdfs --workers --hostnames '$JN' --daemon start journalnode"
       su "$USERNAME" -c 'hdfs zkfc -formatZK -force'
@@ -36,6 +34,11 @@ hadoop)
     su "$USERNAME" -c 'hdfs --daemon stop journalnode'
   fi
   ;;
+flume)
+  FLUME_HOME=$($TMP_DIR/remote/config_reader.py FLUME Home)
+  rm -rf "$FLUME_HOME/lib/guava-11.0.2.jar"
+  mkdir -p "$($TMP_DIR/remote/config_reader.py FLUME Data)"
+  ;;
 mysql)
   MySQL_PASS=$($TMP_DIR/remote/config_reader.py MYSQL RootPassword)
   service mysql stop 2>/dev/null
@@ -46,11 +49,11 @@ mysql)
   rm -rf /etc/my.cnf
   rm -rf /usr/my.cnf
   rm -rf /var/log/mysqld.log
-  rpm -Uvh $SOURCE/01_mysql-community-common-5.7.16-1.el7.x86_64.rpm 1>/dev/null 2>&1
-  rpm -Uvh $SOURCE/02_mysql-community-libs-5.7.16-1.el7.x86_64.rpm 1>/dev/null 2>&1
-  rpm -Uvh $SOURCE/03_mysql-community-libs-compat-5.7.16-1.el7.x86_64.rpm 1>/dev/null 2>&1
-  rpm -Uvh $SOURCE/04_mysql-community-client-5.7.16-1.el7.x86_64.rpm 1>/dev/null 2>&1
-  rpm -Uvh $SOURCE/05_mysql-community-server-5.7.16-1.el7.x86_64.rpm 1>/dev/null 2>&1
+  rpm -Uvh "$SOURCE/01_mysql-community-common-5.7.16-1.el7.x86_64.rpm" 1>/dev/null 2>&1
+  rpm -Uvh "$SOURCE/02_mysql-community-libs-5.7.16-1.el7.x86_64.rpm" 1>/dev/null 2>&1
+  rpm -Uvh "$SOURCE/03_mysql-community-libs-compat-5.7.16-1.el7.x86_64.rpm" 1>/dev/null 2>&1
+  rpm -Uvh "$SOURCE/04_mysql-community-client-5.7.16-1.el7.x86_64.rpm" 1>/dev/null 2>&1
+  rpm -Uvh "$SOURCE/05_mysql-community-server-5.7.16-1.el7.x86_64.rpm" 1>/dev/null 2>&1
   systemctl start mysqld
   PASSWORD=$(grep password /var/log/mysqld.log | cut -d " " -f 11)
   mysql -uroot -p"$PASSWORD" --connect-expired-password --execute="
@@ -72,6 +75,7 @@ hive)
     HiveUser="$($TMP_DIR/remote/config_reader.py HIVE MySQLUser)"
     HivePass="$($TMP_DIR/remote/config_reader.py HIVE MySQLPassword)"
     MetaDB="$($TMP_DIR/remote/config_reader.py HIVE MetaDB)"
+    # shellcheck disable=SC2087
     ssh "$MySQL_Host" "mysql -uroot -p'$MySQL_PASS'" <<EOF 1>/dev/null 2>&1
 set global validate_password_length=4;
 set global validate_password_policy=0;
@@ -81,6 +85,15 @@ CREATE USER if not exists '$HiveUser'@'%' IDENTIFIED BY '$HivePass';
 GRANT ALL ON $MetaDB.* to '$HiveUser'@'%' WITH GRANT OPTION;
 EOF
     schematool -initSchema -dbType mysql -verbose
+    # shellcheck disable=SC2087
+    ssh "$MySQL_Host" "mysql -uroot -p'$MySQL_PASS'" <<EOF 1>/dev/null 2>&1
+alter table $MetaDB.COLUMNS_V2 modify column COMMENT varchar(256) character set utf8mb4 COLLATE utf8mb4_unicode_ci;
+alter table $MetaDB.TABLE_PARAMS modify column PARAM_VALUE varchar(4000) character set utf8mb4 COLLATE utf8mb4_unicode_ci;
+alter table $MetaDB.PARTITION_PARAMS modify column PARAM_VALUE varchar(4000) character set utf8mb4 COLLATE utf8mb4_unicode_ci;
+alter table $MetaDB.PARTITION_KEYS modify column PKEY_COMMENT varchar(4000) character set utf8mb4 COLLATE utf8mb4_unicode_ci;
+alter table $MetaDB.PARTITION_KEY_VALS  modify column PART_KEY_VAL varchar(256) character set utf8mb4 COLLATE utf8mb4_unicode_ci;
+alter table $MetaDB.INDEX_PARAMS modify column PARAM_VALUE varchar(4000) character set utf8mb4 COLLATE utf8mb4_unicode_ci;
+EOF
   fi
   ;;
 spark)
@@ -91,12 +104,10 @@ spark)
       ArchiveClean=$SOURCE/$ArchiveClean
     fi
     $TMP_DIR/remote/extract_tar.py "$ArchiveClean" $TMP_DIR/spark
-    su - "$USERNAME" -c "start-dfs.sh"
     su - "$USERNAME" -c "hdfs dfsadmin -safemode wait"
     su - "$USERNAME" -c "hadoop fs -mkdir -p /spark/history"
     su - "$USERNAME" -c "hadoop fs -mkdir -p /spark/jars"
     su - "$USERNAME" -c "hadoop fs -put $TMP_DIR/spark/jars/* /spark/jars/ >/dev/null 2>&1"
-    su - "$USERNAME" -c "stop-dfs.sh"
     rm -rf $TMP_DIR/spark
   fi
   ;;
@@ -124,6 +135,7 @@ azkaban)
     $TMP_DIR/remote/extract_tar.py "$WEB_ARCHIVE" "$AZ_HOME/web"
     $TMP_DIR/remote/extract_tar.py "$DB_ARCHIVE" "$AZ_HOME/db"
 
+    # shellcheck disable=SC2087
     ssh "$MySQL_Host" "mysql -uroot -p'$MySQL_PASS'" <<EOF 1>/dev/null 2>&1
 set global validate_password_length=4;
 set global validate_password_policy=0;
@@ -132,7 +144,7 @@ create database $Az_DB;
 CREATE USER if not exists '$Az_User'@'%' IDENTIFIED BY '$Az_Pass';
 GRANT ALL ON $Az_DB.* to '$Az_User'@'%' WITH GRANT OPTION;
 EOF
-    ssh "$MySQL_Host" "mysql -u$Az_User -p'$Az_Pass' -D'$Az_DB'" <"$AZ_HOME/db/create-all-sql-3.84.4.sql" 1>/dev/null 2>&1
+    ssh "$MySQL_Host" "mysql -u'$Az_User' -p'$Az_Pass' -D'$Az_DB'" <"$AZ_HOME/db/create-all-sql-3.84.4.sql" 1>/dev/null 2>&1
     $TMP_DIR/remote/configuration.py az-web
     sed -i '/<azkaban-users>/a<user password="atguigu" roles="metrics,admin" username="atguigu"\/>' $AZ_HOME/web/conf/azkaban-users.xml
   fi
@@ -147,6 +159,53 @@ EOF
     fi
   done
   ;;
-*) ;;
+sqoop)
+  MySQLConnector=$($TMP_DIR/remote/config_reader.py MYSQL Connector)
+  if [[ ! "$MySQLConnector" =~ ^http ]] || [[ ! "$MySQLConnector" =~ ^/ ]]; then
+    MySQLConnector=${SOURCE}/${MySQLConnector}
+  fi
+  SQOOP_HOME=$($TMP_DIR/remote/config_reader.py SQOOP Home)
+  cp "${MySQLConnector}" "${SQOOP_HOME}/lib"
+  ;;
+shucang)
+  ARCHIVE=$($TMP_DIR/remote/config_reader.py SHUCANG Archive)
+  APP_HOME=$($TMP_DIR/remote/config_reader.py SHUCANG AppHome)
+  DB_HOME=$($TMP_DIR/remote/config_reader.py SHUCANG DbHome)
+  TMP_HOME=/tmp/shucang
+  MySQL_Host="$($TMP_DIR/remote/config_reader.py MYSQL Host)"
+  MySQL_PASS="$($TMP_DIR/remote/config_reader.py MYSQL RootPassword)"
 
+  rm -rf "$TMP_HOME" "$APP_HOME" "$DB_HOME"
+  if [[ ! "$ARCHIVE" =~ ^http ]] || [[ ! "$ARCHIVE" =~ ^/ ]]; then
+    ARCHIVE=$SOURCE/$ARCHIVE
+  fi
+  $TMP_DIR/remote/extract_tar.py "$ARCHIVE" "$TMP_HOME"
+  cp -r "$TMP_HOME/applog" "$APP_HOME"
+  cp -r "$TMP_HOME/db_log" "$DB_HOME"
+  mkdir -p "/home/$USERNAME/bin"
+  cp -rf $TMP_HOME/*.sh "/home/$USERNAME/bin"
+  FLUME_HOME=$($TMP_DIR/remote/config_reader.py FLUME Home)
+  if [ -d "$FLUME_HOME" ]; then
+    cp -f "$TMP_HOME/flumeinterceptor.jar" "$FLUME_HOME/lib"
+  fi
+  $TMP_DIR/remote/configuration.py "shucang"
+  IFS="," read -r -a HIVE_HOSTS <<<"$($TMP_DIR/remote/config_reader.py HIVE Host)"
+
+  if [ "$HOSTNAME" = "${HIVE_HOSTS[0]}" ]; then
+    # shellcheck disable=SC2087,SC2029
+    ssh "$MySQL_Host" "mysql -uroot -p'$MySQL_PASS'" <<EOF 1>/dev/null 2>&1
+drop database if exists gmall;
+create database gmall DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+drop database if exists gmall_report;
+create database gmall_report DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+EOF
+    ssh "$MySQL_Host" "mysql -u'root' -p'$MySQL_PASS' -D'gmall'" <"$DB_HOME/gmall.sql" 1>/dev/null 2>&1
+    ssh "$MySQL_Host" "mysql -u'root' -p'$MySQL_PASS' -D'gmall_report'" <"$DB_HOME/gmall_report.sql" 1>/dev/null 2>&1
+    "/home/$USERNAME/bin/mock.sh" init
+    defaultFS=$(hdfs getconf -confKey fs.defaultFS)
+    sed -i "s/hdfs:\/\/mycluster/${defaultFS//\//\\/}/g" "$TMP_HOME/init.sql"
+    su - "$USERNAME" -c "hive -f $TMP_HOME/init.sql"
+  fi
+  ;;
+*) ;;
 esac
