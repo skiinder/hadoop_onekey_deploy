@@ -9,7 +9,7 @@ case $package in
 hadoop)
   IFS="," read -r -a NNs <<<"$($TMP_DIR/remote/config_reader.py HADOOP NameNode)"
   if [ "${#NNs[@]}" -eq 1 ]; then
-    if [ "$NN" = "$HOSTNAME" ]; then
+    if [ "${#NNs[0]}" = "$HOSTNAME" ]; then
       su "$USERNAME" -c 'hdfs namenode -format'
     fi
   else

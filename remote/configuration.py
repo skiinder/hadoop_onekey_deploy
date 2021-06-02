@@ -75,9 +75,15 @@ class Configuration:
         for name, value in self.__pros.items():
             props = doc.createElement("property")
             name_node = doc.createElement("name")
-            name_node.appendChild(doc.createTextNode(name))
+            if name:
+                name_node.appendChild(doc.createTextNode(name))
+            else:
+                name_node.appendChild(doc.createTextNode(""))
             value_node = doc.createElement("value")
-            value_node.appendChild(doc.createTextNode(value))
+            if value:
+                value_node.appendChild(doc.createTextNode(value))
+            else:
+                value_node.appendChild(doc.createTextNode(""))
             props.appendChild(name_node)
             props.appendChild(value_node)
             root.appendChild(props)
