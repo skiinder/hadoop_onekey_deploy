@@ -152,6 +152,11 @@ def config_hadoop():
         hdfs_site["dfs.ha.automatic-failover.enabled"] = "true"
     hdfs_site.save()
 
+    schedu_config = Configuration(config["Home"] + "/etc/hadoop/capacity-scheduler.xml")
+    schedu_config["yarn.scheduler.capacity.maximum-am-resource-percent"] = "0.3"
+    schedu_config.save()
+
+
     # 修改mapred-site.xml
     mapred_site = Configuration(config["Home"] + "/etc/hadoop/mapred-site.xml")
     mapred_site.clear()
