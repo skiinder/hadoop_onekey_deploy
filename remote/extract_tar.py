@@ -12,6 +12,7 @@ from os.path import dirname
 
 def extract_tar(source: str, target: str):
     target_dir = dirname(target)
+    os.makedirs(name=target_dir, mode=0o755, exist_ok=True)
     stream = requests.get(source, stream=True).raw if source.startswith("http") else open(source, mode="rb")
     tarfile_open = tarfile.open(fileobj=io.BytesIO(stream.read()), mode="r|gz")
     member = tarfile_open.next()
