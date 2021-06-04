@@ -90,7 +90,7 @@ MySQL框架不能定义安装包, 需要预先下载好5.7.16版本的RPM包, �
 - Master: Master节点
 - RegionServer: RegionServer节点
 
-##Getting Started
+## Getting Started
 
 将对应版本安装包放到/opt/software目录下, 然后以root用户身份执行以下命令
 
