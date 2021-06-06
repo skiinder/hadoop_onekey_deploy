@@ -10,6 +10,7 @@ from os.path import dirname
 def set_home(package: str):
     env_file = config["GLOBAL"]["EnvFile"]
     home_dir = config[package]["Home"]
+    # 删除之前存在的家目录变量
     try:
         read = open(env_file, "r")
         lines = read.readlines()
@@ -22,6 +23,8 @@ def set_home(package: str):
         out.close()
     except Exception as e:
         pass
+
+    # 写出新的家目录配置
     out = open(env_file, "a")
     out.write("#" + package + "_HOME\n")
     out.write("export " + package + "_HOME=" + home_dir + "\n")

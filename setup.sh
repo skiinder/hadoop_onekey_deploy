@@ -3,28 +3,40 @@
 cd "$(dirname "$0")" || exit 1
 chmod +x ./shell/*
 chmod +x ./remote/*
+
+# 准备部署过程中需要用到的分布式操作脚本
+cp ./shell/xcall /bin
+cp ./shell/xsync /bin
+
+# 将Remote目录拷贝到临时目录, 并分发, 以供分布式执行
 TMP_DIR=/tmp
 rsync -aq ./remote $TMP_DIR
+# 全局声明CLUSTER变量以供子脚本调用
 CLUSTER=$($TMP_DIR/remote/config_reader.py GLOBAL Cluster)
 export CLUSTER
-xcall "killall -9 java" 2>/dev/null
+xsync /bin
+xsync $TMP_DIR/remote
+
+# 将CLUSTER变量添加到环境变量，供集群部署好之后使用
 ENV_FILE=$($TMP_DIR/remote/config_reader.py GLOBAL EnvFile)
 xcall "sed -i '/CLUSTER/d' $ENV_FILE" 2>/dev/null
 xcall "echo '#CLUSTER' >> $ENV_FILE"
 xcall "echo 'export CLUSTER=$CLUSTER' >> $ENV_FILE"
+
+# 关闭所有之前正在运行的Java程序
+xcall "killall -9 java" 2>/dev/null
+
+# 新建用户的脚本目录
 USERNAME=$($TMP_DIR/remote/config_reader.py GLOBAL Username)
 xcall "mkdir -p /home/$USERNAME/bin"
-SOURCE=$($TMP_DIR/remote/config_reader.py GLOBAL DefaultSource)
 
-#环境准备
-cp ./shell/xcall /bin
-cp ./shell/xsync /bin
-xsync /bin
+SOURCE=$($TMP_DIR/remote/config_reader.py GLOBAL DefaultSource)
 xsync "$SOURCE"
-xsync $TMP_DIR/remote
 
 function install_packages() {
   local package=$1
+
+  # 执行框架安装过程
   case $package in
   java | hadoop | zookeeper | flume | kafka | hbase | spark | hive | sqoop)
     CLUSTER=$($TMP_DIR/remote/config_reader.py "$(echo $package | tr 'a-z' 'A-Z')" Host)
@@ -58,6 +70,8 @@ function install_packages() {
     ;;
   *) ;;
   esac
+
+  # 框架安装完成后需要执行的初始化操作, 主要是生成集群操作脚本
   case $package in
   java)
     sed -i "/^CLUSTER/s/CLUSTER=.*/CLUSTER='$CLUSTER'/" ./shell/jpsall
@@ -84,7 +98,7 @@ function install_packages() {
     MASTER="$($TMP_DIR/remote/config_reader.py HBASE Master)"
     RSS="$($TMP_DIR/remote/config_reader.py HBASE RegionServer)"
     sed -i "/^MASTER/s/MASTER=.*/MASTER='$MASTER'/" ./shell/hbase.sh
-    sed -i "/^RSS/s/RSS=.*/RSS='$RSS'/" ./shell/hbase.sh
+    sed  -i "/^RSS/s/RSS=.*/RSS='$RSS'/" ./shell/hbase.sh
     cp ./shell/hbase.sh /home/$USERNAME/bin/
     ;;
   azkaban)
@@ -98,6 +112,8 @@ function install_packages() {
     ;;
   esac
 }
+
+#
 case $1 in
 all)
   for i in java zookeeper hadoop mysql hive sqoop flume kafka spark azkaban hbase shucang; do
@@ -111,11 +127,14 @@ java | hadoop | zookeeper | flume | kafka | hbase | spark | hive | sqoop | mysql
   ;;
 esac
 
+#停止安装过程中开启的框架
 "/home/${USERNAME}/bin/zks.sh" stop
 su - "$USERNAME" -c "stop-dfs.sh"
 su - "$USERNAME" -c "stop-yarn.sh"
+
+# 同步生成的脚本,执行清理工作
 CLUSTER=$($TMP_DIR/remote/config_reader.py GLOBAL Cluster)
 xsync "/home/$USERNAME/bin"
-xcall "killall -9 java" 2>/dev/null
+xsync "/bin"
 xcall "rm -rf $TMP_DIR/remote"
 xcall "chown -R $USERNAME:$USERNAME /opt/* /home/$USERNAME"

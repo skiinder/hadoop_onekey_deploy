@@ -13,6 +13,9 @@ import xml.sax
 from os.path import dirname
 
 
+# Properties类, 接受Properties文件路径的字符串输入
+# 原Porperties文件的内容类似于字典形式调用和修改
+# 修改完成需要调用save方法保存到文件里
 class Properties:
     def __init__(self, file):
         self.__pros = {}
@@ -46,6 +49,9 @@ class Properties:
             print(e)
 
 
+# Configuration类, 接受Hadoop生态的site文件路径的字符串输入
+# 原site文件的内容类似于字典形式调用和修改
+# 修改完成需要调用save方法保存到文件里
 class Configuration:
     def __init__(self, file: str):
         self.__source = file
@@ -93,6 +99,7 @@ class Configuration:
         output.close()
 
 
+# 将一个文件中的内容做替换, 替换的内容是一个dict
 def sed(file: str, sub: dict):
     tmp = open(file, "r")
     lines = tmp.readlines()
@@ -111,6 +118,7 @@ def config_null():
     pass
 
 
+# 配置Hadooop框架
 def config_hadoop():
     config = global_config["HADOOP"]
     # 修改core-site.xml
@@ -123,6 +131,8 @@ def config_hadoop():
     core_site["hadoop.proxyuser." + username + ".users"] = "*"
     name_nodes = config["NameNode"].split(",")
     zk_hosts = global_config["ZOOKEEPER"]["Host"].split(",")
+
+    # 区分是否高可用
     if not len(name_nodes) > 1:
         core_site["fs.defaultFS"] = "hdfs://" + name_nodes[0] + ":8020"
     else:
@@ -158,10 +168,10 @@ def config_hadoop():
         hdfs_site["dfs.ha.automatic-failover.enabled"] = "true"
     hdfs_site.save()
 
+    # 配置Capacity Scheduler的默认配置
     schedu_config = Configuration(config["Home"] + "/etc/hadoop/capacity-scheduler.xml")
     schedu_config["yarn.scheduler.capacity.maximum-am-resource-percent"] = "0.3"
     schedu_config.save()
-
 
     # 修改mapred-site.xml
     mapred_site = Configuration(config["Home"] + "/etc/hadoop/mapred-site.xml")
@@ -184,6 +194,8 @@ def config_hadoop():
     yarn_site["yarn.log-aggregation.retain-seconds"] = "604800"
     yarn_site["yarn.nodemanager.env-whitelist"] = ("JAVA_HOME,HADOOP_COMMON_HOME,HADOOP_HDFS_HOME,HADOOP_CONF_DIR,"
                                                    "CLASSPATH_PREPEND_DISTCACHE,HADOOP_YARN_HOME,HADOOP_MAPRED_HOME")
+
+    # 区分是否高可用
     resource_managers = config["ResourceManager"].split(",")
     if not len(resource_managers) > 1:
         yarn_site["yarn.resourcemanager.hostname"] = resource_managers[0]
@@ -204,14 +216,18 @@ def config_hadoop():
                                                          "recovery.ZKRMStateStore")
     yarn_site.save()
 
+    # 配置Workers文件
     workers = open(config["Home"] + "/etc/hadoop/workers", mode="w")
     for worker in config["Workers"].split(","):
         workers.write(worker + "\n")
     workers.close()
 
 
+# 配置Zookeeper
 def config_zookeeper():
     config = global_config["ZOOKEEPER"]
+
+    # 获取Hostname到ID的映射
     hosts = config["Host"].split(",")
     ids = dict(zip(hosts, range(0, len(hosts))))
     hostname = socket.gethostname()
@@ -235,11 +251,18 @@ def config_zookeeper():
     zoo_config.save()
 
 
+# 配置Hive
 def config_hive():
     config = global_config["HIVE"]
     home_dir = config["Home"]
+
+    # 移除冲突的日志jar包
     os.renames(home_dir + "/lib/log4j-slf4j-impl-2.10.0.jar", home_dir + "/lib/log4j-slf4j-impl-2.10.0.jar.bak")
+
+    # 添加MySQL JDBC驱动
     shutil.copy(global_config["GLOBAL"]["DefaultSource"] + "/" + global_config["MYSQL"]["Connector"], home_dir + "/lib")
+
+    # 配置hive-site.xml
     hive_site = Configuration(home_dir + "/conf/hive-site.xml")
     hive_site.clear()
     hive_site["javax.jdo.option.ConnectionURL"] = "jdbc:mysql://" + global_config["MYSQL"]["Host"] + ":3306/" + config[
@@ -259,6 +282,7 @@ def config_hive():
     hive_site["hive.exec.dynamic.partition.mode"] = "nonstrict"
     hive_site.save()
 
+    # 修改Hive默认堆大小
     env_tmp = open(home_dir + "/conf/hive-env.sh.template", "r")
     lines = env_tmp.readlines()
     env_tmp.close()
@@ -271,6 +295,7 @@ def config_hive():
     env.close()
 
 
+# 配置kafka
 def config_kafka():
     config = global_config["KAFKA"]
     kafka_config = Properties(config["Home"] + "/config/server.properties")
@@ -283,6 +308,7 @@ def config_kafka():
     kafka_config.save()
 
 
+# 配置Spark
 def config_spark():
     hadoop_core = Configuration(global_config["HADOOP"]["Home"] + "/etc/hadoop/core-site.xml")
 
@@ -335,6 +361,7 @@ def config_spark():
     spark_env.close()
 
 
+# 配置Azkaban
 def config_azkaban(component: str):
     config = global_config["AZKABAN"]
     home_dir = config["Home"]
@@ -364,7 +391,7 @@ def config_azkaban(component: str):
 
         return config_exec
 
-
+# 配置Hbase
 def config_hbase():
     config = global_config["HBASE"]
     home_dir = config["Home"]
@@ -397,6 +424,7 @@ def config_hbase():
     os.remove(home_dir + "/lib/slf4j-log4j12-1.7.25.jar")
 
 
+# 配置数仓演示模块
 def config_shucang():
     config = global_config["SHUCANG"]
     app_home = config["AppHome"]
@@ -409,7 +437,8 @@ def config_shucang():
     flume1 = Properties(app_home + "/file-flume-kafka.conf")
     flume1["a1.sources.r1.filegroups.f1"] = app_home + "/log/app.*"
     flume1["a1.sources.r1.positionFile"] = flume_data_dir + "/taildir_position.json"
-    flume1["a1.channels.c1.kafka.bootstrap.servers"] = ":9092,".join(global_config["KAFKA"]["Host"].split(",")) + ":9092"
+    flume1["a1.channels.c1.kafka.bootstrap.servers"] = ":9092,".join(
+        global_config["KAFKA"]["Host"].split(",")) + ":9092"
     flume1.save()
 
     flume2 = Properties(app_home + "/kafka-flume-hdfs.conf")
@@ -453,7 +482,8 @@ def config_shucang():
     })
 
     db_pro = Properties(db_home + "/application.properties")
-    db_pro["spring.datasource.url"] = "jdbc:mysql://" + mysql_host + ":3306/gmall?characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8"
+    db_pro[
+        "spring.datasource.url"] = "jdbc:mysql://" + mysql_host + ":3306/gmall?characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8"
     db_pro["spring.datasource.username"] = "root"
     db_pro["spring.datasource.password"] = mysql_password
     db_pro.save()
@@ -478,6 +508,7 @@ if __name__ == "__main__":
         "shucang": config_shucang,
     }
 
+    # 根据参数调用对应的函数
     try:
         configuration[sys.argv[1]]()
     except Exception as e:

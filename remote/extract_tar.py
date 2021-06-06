@@ -10,6 +10,7 @@ import requests
 from os.path import dirname
 
 
+# 将指定tar包解压并重命名
 def extract_tar(source: str, target: str):
     target_dir = dirname(target)
     os.makedirs(name=target_dir, mode=0o755, exist_ok=True)

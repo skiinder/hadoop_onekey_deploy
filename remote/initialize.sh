@@ -5,6 +5,7 @@ USERNAME=$($TMP_DIR/remote/config_reader.py GLOBAL Username)
 SOURCE=$($TMP_DIR/remote/config_reader.py GLOBAL DefaultSource)
 
 package=$1
+#初始化相关框架
 case $package in
 hadoop)
   IFS="," read -r -a NNs <<<"$($TMP_DIR/remote/config_reader.py HADOOP NameNode)"
