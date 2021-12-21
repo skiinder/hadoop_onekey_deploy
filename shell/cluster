@@ -1,0 +1,30 @@
+#!/bin/bash
+case $1 in
+start)
+  zks.sh start
+  start-dfs.sh
+  xcall -w hadoop102 "mapred --daemon start historyserver"
+  start-yarn.sh
+  kafka.sh start
+  az.sh start
+  f1.sh start
+  f2.sh start
+  hive_services.sh start
+  xcall -w hadoop105 "start-history-server.sh"
+  hbase.sh start
+  ;;
+stop)
+  hbase.sh stop
+  xcall -w hadoop105 "stop-history-server.sh"
+  hive_services.sh stop
+  f2.sh stop
+  f1.sh stop
+  az.sh stop
+  kafka.sh stop
+  stop-yarn.sh
+  xcall -w hadoop102 "mapred --daemon stop historyserver"
+  stop-dfs.sh
+  zks.sh stop
+  ;;
+*) ;;
+esac

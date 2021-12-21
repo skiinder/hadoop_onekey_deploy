@@ -9,16 +9,16 @@ fi
 for file in "$@"
 do
   #4. 判断文件是否存在
-  if [ -e $file ]
+  if [ -e "$file" ]
   then
     #5. 获取父目录
-    pdir=$(cd -P $(dirname $file); pwd)
+    parent_dir=$(cd -P $(dirname "$file"); pwd)
     #6. 获取当前文件的名称
-    fname=$(basename $file)
-    xcall "mkdir -p $pdir"
-    xcall "rsync -aq $HOSTNAME:$pdir/$fname $pdir"
+    filename=$(basename "$file")
+    xcall "mkdir -p $parent_dir"
+    xcall "rsync -aq $HOSTNAME:$parent_dir/$filename $parent_dir"
   else
-    echo $file does not exists!
+    echo "$file" does not exists!
   fi
 done
 

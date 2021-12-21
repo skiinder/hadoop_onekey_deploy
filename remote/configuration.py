@@ -7,7 +7,7 @@ import shutil
 import socket
 import sys
 import xml.dom.minidom
-import xml.etree.cElementTree as etree
+import xml.etree.cElementTree as Etree
 import xml.sax
 
 from os.path import dirname
@@ -57,7 +57,7 @@ class Configuration:
         self.__source = file
         self.__pros = {}
         try:
-            doc = etree.parse(file).getroot()
+            doc = Etree.parse(file).getroot()
             for item in doc.findall("property"):
                 self.__pros[item.find("name").text] = item.find("value").text
         except Exception:

@@ -1,4 +1,10 @@
 #!/bin/bash
+#检查是否为root用户
+if [ ! "$(whoami)" = "root" ]; then
+  echo "请用root用户执行该脚本"
+  exit;
+fi
+
 #初始化变量
 cd "$(dirname "$0")" || exit 1
 chmod +x ./shell/*

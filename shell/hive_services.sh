@@ -3,6 +3,7 @@ CLUSTER="hadoop105"
 IFS="," read -r -a Hosts <<<"$CLUSTER"
 
 hive_start() {
+  hdfs dfsadmin -safemode wait
   xcall -w "${Hosts[0]}" "nohup hive --service hiveserver2 1>/dev/null 2>&1 &"
   while ! nc -z ${Hosts[0]} 10000; do sleep 1; done
 }
